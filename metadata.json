@@ -1,0 +1,6 @@
+{
+  "name": "ClearRoute AI Backend",
+  "description": "Heavy-vehicle-aware truck routing REST API for the Mumbai JNPT to Pune Chakan corridor with restriction filtering, driver hazard alerts, and cost optimization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

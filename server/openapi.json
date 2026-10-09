@@ -1,0 +1,232 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "ClearRoute AI Backend API",
+    "version": "1.0.0",
+    "description": "Heavy-vehicle-aware truck routing REST API for the Mumbai JNPT to Pune Chakan freight corridor with axle/weight/height/width/time-window restriction filtering, driver hazard alerts, and cost optimization."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080/api/v1",
+      "description": "Local Development Server"
+    },
+    {
+      "url": "/api/v1",
+      "description": "Current Environment"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health and database status",
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "example": "ok" },
+                    "db": { "type": "string", "example": "up" },
+                    "service": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/coverage": {
+      "get": {
+        "summary": "Get supported vehicles, restrictions, corridor bounds and prototype disclaimer",
+        "responses": {
+          "200": { "description": "Coverage details" }
+        }
+      }
+    },
+    "/locations": {
+      "get": {
+        "summary": "List corridor road nodes with autocomplete search",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Search keyword matching node name, district, or id",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Array of RoadNode objects" }
+        }
+      }
+    },
+    "/vehicles": {
+      "get": {
+        "summary": "List vehicles accessible to the user (own + demo shared)",
+        "responses": {
+          "200": { "description": "Array of VehicleProfile objects" }
+        }
+      },
+      "post": {
+        "summary": "Create a new vehicle profile",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "type", "loadedWeightT", "heightM", "widthM", "lengthM", "axles", "defaultCargo"],
+                "properties": {
+                  "name": { "type": "string", "example": "BharatBenz 4028T Container" },
+                  "type": { "type": "string", "enum": ["container", "tanker", "tipper", "flatbed"] },
+                  "loadedWeightT": { "type": "number", "minimum": 1, "maximum": 60, "example": 35.0 },
+                  "heightM": { "type": "number", "minimum": 2, "maximum": 5, "example": 4.2 },
+                  "widthM": { "type": "number", "minimum": 1.5, "maximum": 3.5, "example": 2.5 },
+                  "lengthM": { "type": "number", "minimum": 3, "maximum": 30, "example": 14.8 },
+                  "axles": { "type": "integer", "minimum": 2, "maximum": 9, "example": 5 },
+                  "defaultCargo": { "type": "string", "enum": ["general", "hazardous", "perishable"] },
+                  "registrationNumber": { "type": "string", "example": "MH 46 BB 8812" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Created VehicleProfile" },
+          "400": { "description": "Validation error" }
+        }
+      }
+    },
+    "/vehicles/{id}": {
+      "put": {
+        "summary": "Update an existing vehicle profile",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Updated VehicleProfile" } }
+      },
+      "delete": {
+        "summary": "Delete a vehicle profile (demo vehicles cannot be deleted)",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Success response" }, "403": { "description": "Forbidden for demo vehicles" } }
+      }
+    },
+    "/restrictions": {
+      "get": {
+        "summary": "Get highway restrictions with filters",
+        "parameters": [
+          { "name": "type", "in": "query", "schema": { "type": "string", "enum": ["max_weight_t", "max_height_m", "max_width_m", "time_ban", "axle_limit"] } },
+          { "name": "minValue", "in": "query", "schema": { "type": "number" } },
+          { "name": "maxValue", "in": "query", "schema": { "type": "number" } },
+          { "name": "bbox", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Array of Restriction objects" } }
+      }
+    },
+    "/reports": {
+      "get": {
+        "summary": "Get driver community hazard reports",
+        "parameters": [{ "name": "active", "in": "query", "schema": { "type": "boolean" } }],
+        "responses": { "200": { "description": "Array of DriverReport objects" } }
+      },
+      "post": {
+        "summary": "Create a new driver hazard report (rate limited to 10/hour)",
+        "responses": { "201": { "description": "Created DriverReport" } }
+      }
+    },
+    "/reports/{id}/active": {
+      "patch": {
+        "summary": "Toggle active status of a hazard report",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Updated DriverReport" } }
+      }
+    },
+    "/plans": {
+      "post": {
+        "summary": "Calculate truck routing plan, evaluate restrictions, and create a planned trip",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["originId", "destinationId"],
+                "properties": {
+                  "originId": { "type": "string", "example": "jnpt_gate" },
+                  "destinationId": { "type": "string", "example": "chakan_midc" },
+                  "vehicleId": { "type": "string", "example": "veh_container_40ft" },
+                  "vehicle": { "$ref": "#/components/schemas/VehicleProfile" },
+                  "departureTime": { "type": "string", "example": "08:30" },
+                  "deadlineTime": { "type": "string", "example": "18:00" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "RoutingPlan object with recommended routes, rejected routes, and explainability" },
+          "422": { "description": "No legal route exists for this vehicle specifications" }
+        }
+      }
+    },
+    "/plans/{id}": {
+      "get": {
+        "summary": "Get stored routing plan by ID",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "RoutingPlan" } }
+      }
+    },
+    "/plans/{id}/reroute": {
+      "post": {
+        "summary": "Recompute plan using latest active reports and return changes summary",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Object with plan and changes explanation" } }
+      }
+    },
+    "/trips": {
+      "get": {
+        "summary": "Get user or guest trip history",
+        "responses": { "200": { "description": "Array of TripHistoryItem objects" } }
+      }
+    },
+    "/trips/{id}/status": {
+      "patch": {
+        "summary": "Update trip status (planned -> active -> completed)",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["status"],
+                "properties": {
+                  "status": { "type": "string", "enum": ["planned", "active", "completed"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Updated TripHistoryItem" } }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "VehicleProfile": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "type": { "type": "string", "enum": ["container", "tanker", "tipper", "flatbed"] },
+          "loadedWeightT": { "type": "number" },
+          "heightM": { "type": "number" },
+          "widthM": { "type": "number" },
+          "lengthM": { "type": "number" },
+          "axles": { "type": "integer" },
+          "defaultCargo": { "type": "string", "enum": ["general", "hazardous", "perishable"] }
+        }
+      }
+    }
+  }
+}

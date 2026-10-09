@@ -1,0 +1,170 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum VehicleType {
+  container
+  tanker
+  tipper
+  flatbed
+}
+
+enum CargoType {
+  general
+  hazardous
+  perishable
+}
+
+enum RestrictionType {
+  max_weight_t
+  max_height_m
+  max_width_m
+  time_ban
+  axle_limit
+}
+
+enum HazardType {
+  closure
+  waterlogging
+  landslide
+  accident
+  weight_check
+}
+
+enum HazardSeverity {
+  blocking
+  caution
+}
+
+enum TripStatus {
+  planned
+  active
+  completed
+}
+
+model Vehicle {
+  id                 String       @id @default(cuid())
+  userId             String?
+  name               String
+  type               VehicleType
+  loadedWeightT      Float
+  heightM            Float
+  widthM             Float
+  lengthM            Float
+  axles              Int
+  defaultCargo       CargoType
+  registrationNumber String?
+  isDemo             Boolean      @default(false)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@index([userId])
+}
+
+model RoadNode {
+  id             String     @id
+  name           String
+  district       String
+  lat            Float
+  lng            Float
+  isDemoLocation Boolean    @default(true)
+  edgesFrom      RoadEdge[] @relation("FromNode")
+  edgesTo        RoadEdge[] @relation("ToNode")
+}
+
+model RoadEdge {
+  id              String        @id
+  fromNodeId      String
+  toNodeId        String
+  distanceKm      Float
+  baseTimeMin     Float
+  tollInr         Float
+  roadName        String
+  ghatSection     Boolean       @default(false)
+  laneCount       Int?
+  pathCoordinates Json
+  fromNode        RoadNode      @relation("FromNode", fields: [fromNodeId], references: [id])
+  toNode          RoadNode      @relation("ToNode", fields: [toNodeId], references: [id])
+  restrictions    Restriction[]
+
+  @@index([fromNodeId])
+  @@index([toNodeId])
+}
+
+model Restriction {
+  id              String          @id
+  edgeId          String
+  type            RestrictionType
+  value           Float
+  label           String
+  locationName    String
+  lat             Float
+  lng             Float
+  startHour       Int?
+  endHour         Int?
+  description     String
+  sourceAuthority String?
+  edge            RoadEdge        @relation(fields: [edgeId], references: [id], onDelete: Cascade)
+
+  @@index([edgeId])
+}
+
+model DriverReport {
+  id             String         @id @default(cuid())
+  userId         String?
+  type           HazardType
+  title          String
+  locationName   String
+  lat            Float
+  lng            Float
+  active         Boolean        @default(true)
+  severity       HazardSeverity
+  affectedEdgeId String?
+  notes          String?
+  reportedBy     String
+  createdAt      DateTime       @default(now())
+
+  @@index([userId])
+  @@index([active])
+}
+
+model RoutingPlan {
+  id                String   @id @default(cuid())
+  userId            String?
+  originNodeId      String
+  destinationNodeId String
+  vehicleSnapshot   Json
+  departureTime     String
+  deadlineTime      String
+  result            Json
+  createdAt         DateTime @default(now())
+  trips             Trip[]
+
+  @@index([userId])
+}
+
+model Trip {
+  id          String      @id @default(cuid())
+  userId      String?
+  planId      String
+  status      TripStatus  @default(planned)
+  distanceKm  Float
+  durationMin Float
+  costInr     Float
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime    @default(now())
+  plan        RoutingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([planId])
+}
